@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aplikasi Kupon Solar</title>
+<style>
+*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;background:#f4f7fb;color:#1f2937}
+header{background:#123b5d;color:white;padding:20px}header h1{margin:0 0 6px;font-size:24px}header p{margin:0;opacity:.85}
+main{max-width:1100px;margin:20px auto;padding:0 14px}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+button,.tab{border:0;border-radius:8px;padding:10px 14px;cursor:pointer;font-weight:600;background:#e5e7eb;color:#1f2937}
+button.primary,.tab.active{background:#1769aa;color:white}button.danger{background:#fee2e2;color:#991b1b}
+.panel{background:white;border-radius:14px;padding:18px;box-shadow:0 2px 10px #0000000d;margin-bottom:18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+label{font-size:13px;font-weight:700;display:block;margin-bottom:5px}input,select,textarea{width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font:inherit}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.hidden{display:none}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.metric{background:#eef6ff;border-radius:12px;padding:15px}.metric b{font-size:25px;display:block;margin-top:5px}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top}th{background:#f8fafc}
+.badge{display:inline-block;padding:4px 8px;border-radius:20px;font-size:12px;font-weight:700}.draft{background:#e5e7eb}.waiting{background:#fef3c7}.approved{background:#dbeafe}.loading{background:#ede9fe}.finish{background:#dcfce7}.rejected{background:#fee2e2}
+.small{font-size:12px;color:#64748b}.empty{padding:25px;text-align:center;color:#64748b}
+@media(max-width:600px){header h1{font-size:20px}table{display:block;overflow-x:auto;white-space:nowrap}}
+</style>
+</head>
+<body>
+<header><h1>Fuel Management — Kupon Solar</h1><p>Maker • Approval Maker • Loading • Finish • Rekap</p></header>
+<main>
+<div class="tabs">
+<button class="tab active" data-tab="dashboard">Dashboard</button><button class="tab" data-tab="maker">Maker</button><button class="tab" data-tab="approval">Approval</button><button class="tab" data-tab="loading">Loading</button><button class="tab" data-tab="finish">Finish</button><button class="tab" data-tab="rekap">Rekap</button>
+</div>
+
+<section id="dashboard" class="view">
+<div class="cards" id="metrics"></div>
+<div class="panel"><h2>Alur proses</h2><p>1. Maker membuat kupon → 2. Approval memeriksa → 3. Loading mencatat pengisian → 4. Finish menutup transaksi → 5. Rekap menghitung pemakaian.</p></div>
+</section>
+
+<section id="maker" class="view hidden">
+<div class="panel"><h2>Buat Pengajuan Kupon</h2>
+<form id="makerForm"><div class="grid">
+<div><label>Tanggal</label><input type="date" id="date" required></div>
+<div><label>Nama Maker</label><input id="makerName" placeholder="Nama pengaju" required></div>
+<div><label>Unit / Kendaraan</label><input id="unit" placeholder="Contoh: DT-001" required></div>
+<div><label>Nomor Polisi / ID Alat</label><input id="vehicle" placeholder="Contoh: B 1234 XYZ"></div>
+<div><label>Departemen / Site</label><input id="site" placeholder="Operasional"></div>
+<div><label>Jumlah Pengajuan (liter)</label><input type="number" id="requested" min="1" step="0.01" required></div>
+<div><label>HM / KM</label><input id="hm" placeholder="Contoh: 5240 HM"></div>
+<div><label>Rencana Pengisian</label><input type="datetime-local" id="schedule"></div>
+</div><div style="margin-top:12px"><label>Tujuan / Keterangan</label><textarea id="notes" rows="2" placeholder="Tujuan penggunaan solar"></textarea></div>
+<div class="actions"><button class="primary">Simpan & Kirim Approval</button><button type="reset">Reset</button></div></form></div>
+</section>
+
+<section id="approval" class="view hidden"><div class="panel"><h2>Approval Maker</h2><div id="approvalList"></div></div></section>
+<section id="loading" class="view hidden"><div class="panel"><h2>Proses Loading</h2><div id="loadingList"></div></div></section>
+<section id="finish" class="view hidden"><div class="panel"><h2>Finish Transaksi</h2><div id="finishList"></div></div></section>
+<section id="rekap" class="view hidden"><div class="panel"><h2>Rekap Pemakaian Solar</h2><div class="grid"><div><label>Dari tanggal</label><input type="date" id="from"></div><div><label>Sampai tanggal</label><input type="date" id="to"></div></div><div class="actions"><button class="primary" id="filterRekap">Tampilkan</button><button id="exportCsv">Export CSV</button></div><div id="rekapResult" style="margin-top:15px"></div></div></section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let data=JSON.parse(localStorage.getItem('kuponSolarData')||'[]');
+const today=new Date().toISOString().slice(0,10);$('date').value=today;
+function save(){localStorage.setItem('kuponSolarData',JSON.stringify(data));renderAll()}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function badge(s){let c=s==='Finish'?'finish':s==='Approved'?'approved':s==='Loading'?'loading':s==='Rejected'?'rejected':s==='Waiting Approval'?'waiting':'draft';return `<span class="badge ${c}">${s}</span>`}
+function row(x,actions=''){return `<tr><td>${esc(x.id)}</td><td>${esc(x.date)}</td><td>${esc(x.unit)}<br><span class="small">${esc(x.vehicle)}</span></td><td>${esc(x.requested)}</td><td>${esc(x.actual||0)}</td><td>${badge(x.status)}</td><td>${actions}</td></tr>`}
+function table(items,actions){if(!items.length)return '<div class="empty">Tidak ada transaksi.</div>';return `<table><thead><tr><th>No. Kupon</th><th>Tanggal</th><th>Unit</th><th>Ajukan (L)</th><th>Aktual (L)</th><th>Status</th><th>Aksi</th></tr></thead><tbody>${items.map(x=>row(x,actions(x))).join('')}</tbody></table>`}
+$('makerForm').addEventListener('submit',e=>{e.preventDefault();let n=data.length+1;data.push({id:'KPN-'+String(n).padStart(4,'0'),date:$('date').value,maker:$('makerName').value,unit:$('unit').value,vehicle:$('vehicle').value,site:$('site').value,requested:+$('requested').value,hm:$('hm').value,schedule:$('schedule').value,notes:$('notes').value,status:'Waiting Approval',actual:0,created:new Date().toISOString()});e.target.reset();$('date').value=today;save();show('approval');alert('Pengajuan berhasil dikirim ke Approval Maker.')});
+function renderAll(){let counts={all:data.length,wait:data.filter(x=>x.status==='Waiting Approval').length,approved:data.filter(x=>x.status==='Approved').length,loading:data.filter(x=>x.status==='Loading').length,finish:data.filter(x=>x.status==='Finish').length};$('metrics').innerHTML=Object.entries({Total:counts.all,'Menunggu Approval':counts.wait,Disetujui:counts.approved,Loading:counts.loading,Selesai:counts.finish}).map(([k,v])=>`<div class="metric">${k}<b>${v}</b></div>`).join('');
+$('approvalList').innerHTML=table(data.filter(x=>x.status==='Waiting Approval'),x=>`<button class="primary" onclick="approve('${x.id}')">Approve</button> <button class="danger" onclick="rejectIt('${x.id}')">Tolak</button>`);
+$('loadingList').innerHTML=table(data.filter(x=>x.status==='Approved'),x=>`<button class="primary" onclick="startLoad('${x.id}')">Mulai Loading</button>`);
+$('finishList').innerHTML=table(data.filter(x=>x.status==='Loading'),x=>`<button class="primary" onclick="finishIt('${x.id}')">Finish</button>`);
+renderRekap();
+}
+function find(id){return data.find(x=>x.id===id)}
+function approve(id){find(id).status='Approved';save()}
+function rejectIt(id){let x=find(id),r=prompt('Alasan penolakan:');if(r!==null){x.status='Rejected';x.reason=r;save()}}
+function startLoad(id){let x=find(id),v=prompt('Masukkan volume aktual solar (liter):',x.requested);if(v!==null&&v!==''&&+v>=0){x.actual=+v;x.status='Loading';x.start=new Date().toISOString();save()}}
+function finishIt(id){let x=find(id);if(confirm('Tutup transaksi '+id+'?')){x.status='Finish';x.end=new Date().toISOString();save()}}
+function show(id){document.querySelectorAll('.view').forEach(v=>v.classList.toggle('hidden',v.id!==id));document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===id))}
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>show(b.dataset.tab)));
+function renderRekap(){let from=$('from').value,to=$('to').value;let arr=data.filter(x=>x.status==='Finish'&&(!from||x.date>=from)&&(!to||x.date<=to));let req=arr.reduce((a,x)=>a+x.requested,0),act=arr.reduce((a,x)=>a+x.actual,0);$('rekapResult').innerHTML=`<div class="cards"><div class="metric">Total Pengajuan<b>${req.toFixed(2)} L</b></div><div class="metric">Total Aktual<b>${act.toFixed(2)} L</b></div><div class="metric">Selisih<b>${(req-act).toFixed(2)} L</b></div></div><br>${table(arr,x=>'<span class="small">Selesai</span>')}`}
+$('filterRekap').onclick=renderRekap;
+$('exportCsv').onclick=()=>{let from=$('from').value,to=$('to').value,arr=data.filter(x=>x.status==='Finish'&&(!from||x.date>=from)&&(!to||x.date<=to));let csv='No Kupon,Tanggal,Maker,Unit,ID Alat,Site,Pengajuan Liter,Aktual Liter,Selisih,Status\\n'+arr.map(x=>[x.id,x.date,x.maker,x.unit,x.vehicle,x.site,x.requested,x.actual,x.requested-x.actual,x.status].map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\\n');let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='rekap-kupon-solar.csv';a.click();URL.revokeObjectURL(a.href)}
+renderAll();
+</script>
+</body>
+</html>
